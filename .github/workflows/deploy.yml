@@ -1,38 +1,48 @@
-name: Deploy to GitHub Pages
+name: Deploy to AWS EC2
 
-# Runs only when code lands on main (i.e. after a PR is merged)
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
-# Needed so this workflow is allowed to publish to Pages
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
+
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload site as artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload website to EC2
+        uses: appleboy/scp-action@v1.0.0
         with:
-          path: "."
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT }}
+          source: "index.html,assets"
+          target: "/tmp/devops-starter"
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Deploy website on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT }}
+          script: |
+            sudo mkdir -p /var/www/html
+
+            sudo cp /tmp/devops-starter/index.html /var/www/html/index.html
+
+            sudo rm -rf /var/www/html/assets
+            sudo cp -r /tmp/devops-starter/assets /var/www/html/assets
+
+            sudo systemctl restart nginx
+
+            sudo rm -rf /tmp/devops-starter
+
+            echo "Website deployed successfully!"
